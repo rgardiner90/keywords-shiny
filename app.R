@@ -34,7 +34,8 @@ ui <- fluidPage(
       # Show a plot of the generated distribution
       mainPanel(
          tabsetPanel(type = "tabs",
-                    tabPanel("Most Common Words", plotOutput("contents"))  
+                    tabPanel("Most Common Words", plotOutput("contents")),
+                    tabPanel("Unique Words", plotOutput("unique"))
          )
       )
    )
@@ -69,7 +70,8 @@ server <- function(input, output) {
         unnest_tokens("word", value) %>%
         filter(!str_detect(word, "[:digit:]")) %>%
         anti_join(stop_words, by = "word") %>%
-        filter(!word %in% custom_stops)
+        filter(!word %in% custom_stops) %>%
+        mutate(source = "Article")
       
       
       df_unigram %>%
@@ -144,7 +146,49 @@ server <- function(input, output) {
   
   output$unique <- renderPlot({
     
+    req(input$file1)
     
+    
+    tryCatch(
+      {
+        df_raw <- pdftools::pdf_text(input$file1$datapath) %>%
+          read_lines() %>%
+          str_squish() %>%
+          enframe()
+        
+      },
+      error = function(e) {
+        # return a safeError if a parsing error occurs
+        stop(safeError(e))
+      }
+    )
+    
+    training <- read_csv("https://raw.githubusercontent.com/rgardiner90/keywords-shiny/master/unique_training.csv") 
+    
+    df_unigram <- df_raw %>%
+      unnest_tokens("word", value) %>%
+      filter(!str_detect(word, "[:digit:]")) %>%
+      anti_join(stop_words, by = "word") %>%
+      filter(!word %in% custom_stops) %>%
+      mutate(source = "Article")
+    
+    combined <- rbind(df_unigram, training) %>%
+      group_by(source) %>%
+      count(word, sort = TRUE)
+    
+    combined %>%
+      bind_log_odds(source, word, n) %>%
+      filter(source == "Article") %>%
+      arrange(desc(log_odds)) %>%
+      head(15) %>%
+      mutate(word = fct_reorder(word, log_odds)) %>%
+      ggplot(aes(x = word, y = log_odds, fill = log_odds)) +
+      geom_col(show.legend = FALSE) +
+      labs(x = "", y = "Weighted Log-Odds",
+           title = "Most Unique Words") +
+      coord_flip() +
+      scale_fill_gradient(low = "lightgreen", high = "green") +
+      theme_minimal() 
     
   })
   
