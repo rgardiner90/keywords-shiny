@@ -10,7 +10,6 @@ custom_stops <- c("https", "www", "google")
 
 
 
-
 # Define UI for application that draws a histogram
 ui <- fluidPage(
    
